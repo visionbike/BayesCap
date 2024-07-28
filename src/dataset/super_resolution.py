@@ -28,7 +28,7 @@ class SRDataset(Dataset):
         #
         if mode == "train":
             self.hr_transforms = transforms.Compose([
-                transforms.RandomCrop(image_size),
+                transforms.RandomCrop(image_size, pad_if_needed=True),
                 transforms.RandomRotation(90),
                 transforms.RandomHorizontalFlip(0.5),
             ])
