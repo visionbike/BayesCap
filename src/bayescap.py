@@ -15,29 +15,33 @@ __all__ = [
 
 
 def eval_BayesCap(
-        NetC: nn.Module,
-        NetG: nn.Module,
+        net_cap: nn.Module,
+        net_gen: nn.Module,
         eval_loader: DataLoader,
-        device: str = "cuda",
+        device: str = "cuda:0",
         dtype: torch.dtype = torch.cuda.FloatTensor,
         task: str | None = None,
-        xMask: torch.Tensor | None = None,
+        x_mask: torch.Tensor | None = None,
+        viz: bool = False,
+        test: bool = False,
 ) -> float:
     """
 
-    :param NetC:
-    :param NetG:
+    :param net_cap:
+    :param net_gen:
     :param eval_loader:
     :param device:
     :param dtype:
     :param task:
-    :param xMask:
+    :param x_mask:
+    :param viz:
+    :param test:
     :return:
     """
-    NetC.to(device)
-    NetC.eval()
-    NetG.to(device)
-    NetG.eval()
+    net_cap.to(device)
+    net_cap.eval()
+    net_gen.to(device)
+    net_gen.eval()
     #
     mean_ssim = 0.
     mean_psnr = 0.
@@ -50,40 +54,46 @@ def eval_BayesCap(
         for (idx, batch) in enumerate(tepoch):
             tepoch.set_description("Validating ...")
             #
-            xLR, xHR = batch[0].to(device), batch[1].to(device)
-            xLR, xHR = xLR.type(dtype), xHR.type(dtype)
+            x_lr, x_hr = batch[0].to(device), batch[1].to(device)
+            x_lr, x_hr = x_lr.type(dtype), x_hr.type(dtype)
             if task == "inpainting":
-                if xMask is None:
-                    xMask = random_mask(xLR.shape[0], (xLR.shape[2], xLR.shape[3]))
-                    xMask = xMask.to(device).type(dtype)
+                if x_mask is None:
+                    x_mask = random_mask(x_lr.shape[0], (x_lr.shape[2], x_lr.shape[3]))
+                    x_mask = x_mask.to(device).type(dtype)
                 else:
-                    xMask = xMask.to(device).type(dtype)
+                    x_mask = x_mask.to(device).type(dtype)
             # pass them through the network
             with torch.no_grad():
                 if task == "inpainting":
-                    _, xSR = NetG(xLR, xMask)
+                    _, x_sr = net_gen(x_lr, x_mask)
                 elif task == "depth":
-                    xSR = NetG(xLR)[("disp", 0)]
+                    x_sr = net_gen(x_lr)[("disp", 0)]
                 else:
-                    xSR = NetG(xLR)
-                xSRC_mu, xSRC_alpha, xSRC_beta = NetC(xSR)
+                    x_sr = net_gen(x_lr)
+                x_src_mu, xSRC_alpha, x_src_beta = net_cap(x_sr)
             a_map = (1 / (xSRC_alpha + 1e-5)).to("cpu").data
-            b_map = xSRC_beta.to("cpu").data
+            b_map = x_src_beta.to("cpu").data
             xSRvar = (a_map ** 2) * (torch.exp(torch.lgamma(3 / (b_map + 1e-2))) / torch.exp(torch.lgamma(1 / (b_map + 1e-2))))
-            n_batch = xSRC_mu.shape[0]
+            n_batch = x_src_mu.shape[0]
             if task == "depth":
-                xHR = xSR
+                x_hr = x_sr
             for j in range(n_batch):
                 num_imgs += 1
-                mean_ssim += compute_image_ssim(xSRC_mu[j], xHR[j])
-                mean_psnr += compute_image_psnr(xSRC_mu[j], xHR[j])
-                mean_mse += compute_image_mse(xSRC_mu[j], xHR[j])
-                mean_mae += compute_image_mae(xSRC_mu[j], xHR[j])
+                if not test:
+                    mean_ssim += compute_image_ssim(x_src_mu[j], x_hr[j])
+                    mean_psnr += compute_image_psnr(x_src_mu[j], x_hr[j])
+                    mean_mse += compute_image_mse(x_src_mu[j], x_hr[j])
+                    mean_mae += compute_image_mae(x_src_mu[j], x_hr[j])
+                else:
+                    mean_ssim += compute_image_ssim(x_sr[j], x_hr[j])
+                    mean_psnr += compute_image_psnr(x_sr[j], x_hr[j])
+                    mean_mse += compute_image_mse(x_sr[j], x_hr[j])
+                    mean_mae += compute_image_mae(x_sr[j], x_hr[j])
+                if viz:
+                    show_SR_w_uncertainties(x_lr[j], x_hr[j], x_sr[j], xSRvar[j])
 
-                show_SR_w_uncertainties(xLR[j], xHR[j], xSR[j], xSRvar[j])
-
-                error_map = torch.mean(torch.pow(torch.abs(xSR[j] - xHR[j]), 2), dim=0).to('cpu').data.reshape(-1)
-                var_map = xSRvar[j].to('cpu').data.reshape(-1)
+                error_map = torch.mean(torch.pow(torch.abs(x_sr[j] - x_hr[j]), 2), dim=0).to("cpu").data.reshape(-1)
+                var_map = xSRvar[j].to("cpu").data.reshape(-1)
                 list_error.extend(list(error_map.numpy()))
                 list_var.extend(list(var_map.numpy()))
         #
@@ -99,12 +109,12 @@ def eval_BayesCap(
 
 
 def train_BayesCap(
-        NetC: nn.Module,
-        NetG: nn.Module,
+        net_cap: nn.Module,
+        net_gen: nn.Module,
         train_loader: DataLoader,
         eval_loader: DataLoader,
-        Cri: nn.Module | functools.partial = TempCombLoss,
-        device: str = "cuda",
+        cri: nn.Module | functools.partial = TempCombLoss,
+        device: str = "cuda:0",
         dtype: torch.dtype = torch.cuda.FloatTensor,
         init_lr: float = 1e-4,
         num_epochs: int = 100,
@@ -113,14 +123,15 @@ def train_BayesCap(
         t1: float = 1e0,
         t2: float = 5e-2,
         task: str | None = None,
+        viz: bool = False
 ) -> None:
     """
 
-    :param NetC:
-    :param NetG:
+    :param net_cap:
+    :param net_gen:
     :param train_loader:
     :param eval_loader:
-    :param Cri:
+    :param cri:
     :param device:
     :param dtype:
     :param init_lr:
@@ -130,13 +141,14 @@ def train_BayesCap(
     :param t1:
     :param t2:
     :param task:
+    :param viz:
     :return:
     """
-    NetC.to(device)
-    NetC.train()
-    NetG.to(device)
-    NetG.eval()
-    optimizer = torch.optim.Adam(list(NetC.parameters()), lr=init_lr)
+    net_cap.to(device)
+    net_cap.train()
+    net_gen.to(device)
+    net_gen.eval()
+    optimizer = torch.optim.Adam(list(net_cap.parameters()), lr=init_lr)
     optim_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, num_epochs)
     #
     score = -1e8
@@ -149,25 +161,25 @@ def train_BayesCap(
                     break
                 tepoch.set_description(f"Epoch {epoch}")
                 #
-                xLR, xHR = batch[0].to(device), batch[1].to(device)
-                xLR, xHR = xLR.type(dtype), xHR.type(dtype)
+                x_lr, x_hr = batch[0].to(device), batch[1].to(device)
+                x_lr, x_hr = x_lr.type(dtype), x_hr.type(dtype)
                 if task == "inpainting":
-                    xMask = random_mask(xLR.shape[0], (xLR.shape[2], xLR.shape[3]))
-                    xMask = xMask.to(device).type(dtype)
+                    x_mask = random_mask(x_lr.shape[0], (x_lr.shape[2], x_lr.shape[3]))
+                    x_mask = x_mask.to(device).type(dtype)
                 # pass them through the network
                 with torch.no_grad():
                     if task == "inpainting":
-                        _, xSR1 = NetG(xLR, xMask)
+                        _, x_sr = net_gen(x_lr, x_mask)
                     elif task == "depth":
-                        xSR1 = NetG(xLR)[("disp", 0)]
+                        x_sr = net_gen(x_lr)[("disp", 0)]
                     else:
-                        xSR1 = NetG(xLR)
+                        x_sr = net_gen(x_lr)
                 # with torch.autograd.set_detect_anomaly(True):
-                xSR = xSR1.clone()
-                xSRC_mu, xSRC_alpha, xSRC_beta = NetC(xSR)
-                # print(xSRC_alpha)
+                # x_sr = x_sr.clone()
+                x_src_mu, x_src_alpha, x_src_beta = net_cap(x_sr)
+                # print(x_src_alpha)
                 optimizer.zero_grad()
-                loss = Cri(xSRC_mu, xSRC_alpha, xSRC_beta, xSR, xHR, t1=t1, t2=t2)
+                loss = cri(x_src_mu, x_src_alpha, x_src_beta, x_sr, x_hr, t1=t1, t2=t2)
                 # print(loss)
                 loss.backward()
                 optimizer.step()
@@ -178,18 +190,19 @@ def train_BayesCap(
             all_loss.append(loss_epoch)
             print(f"Avg. loss: {loss_epoch}")
         # evaluate and save the models
-        torch.save(NetC.state_dict(), ckpt_path + "_last.pth")
+        torch.save(net_cap.state_dict(), ckpt_path + "_last.pth")
         if (epoch % eval_every) == 0:
             curr_score = eval_BayesCap(
-                NetC,
-                NetG,
+                net_cap,
+                net_gen,
                 eval_loader,
                 device=device,
                 dtype=dtype,
                 task=task,
+                viz=viz
             )
             print(f"current score: {curr_score} | Last best score: {score}")
             if curr_score >= score:
                 score = curr_score
-                torch.save(NetC.state_dict(), ckpt_path + "_best.pth")
+                torch.save(net_cap.state_dict(), ckpt_path + "_best.pth")
     optim_scheduler.step()
