@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from .super_resolution_task import *
+from super_resolution_task import *
 from metric import *
 from viz import *
 
