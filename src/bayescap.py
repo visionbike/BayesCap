@@ -3,9 +3,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from loss import *
+from .super_resolution_task import *
 from metric import *
-from utils import *
 from viz import *
 
 __all__ = [
@@ -54,46 +53,49 @@ def eval_BayesCap(
         for (idx, batch) in enumerate(tepoch):
             tepoch.set_description("Validating ...")
             #
-            x_lr, x_hr = batch[0].to(device), batch[1].to(device)
-            x_lr, x_hr = x_lr.type(dtype), x_hr.type(dtype)
+            x_a, x_b = batch[0].to(device).type(dtype), batch[1].to(device).type(dtype)
             if task == "inpainting":
                 if x_mask is None:
-                    x_mask = random_mask(x_lr.shape[0], (x_lr.shape[2], x_lr.shape[3]))
+                    x_mask = random_mask(x_a.shape[0], (x_a.shape[2], x_a.shape[3]))
                     x_mask = x_mask.to(device).type(dtype)
                 else:
                     x_mask = x_mask.to(device).type(dtype)
             # pass them through the network
             with torch.no_grad():
                 if task == "inpainting":
-                    _, x_sr = net_gen(x_lr, x_mask)
+                    _, y_b = net_gen(x_a, x_mask)
                 elif task == "depth":
-                    x_sr = net_gen(x_lr)[("disp", 0)]
+                    y_b = net_gen(x_a)[("disp", 0)]
                 else:
-                    x_sr = net_gen(x_lr)
-                x_src_mu, xSRC_alpha, x_src_beta = net_cap(x_sr)
-            a_map = (1 / (xSRC_alpha + 1e-5)).to("cpu").data
-            b_map = x_src_beta.to("cpu").data
-            xSRvar = (a_map ** 2) * (torch.exp(torch.lgamma(3 / (b_map + 1e-2))) / torch.exp(torch.lgamma(1 / (b_map + 1e-2))))
-            n_batch = x_src_mu.shape[0]
+                    y_b = net_gen(x_a)
+                y_bc_mu, y_bc_alpha, y_bc_beta = net_cap(y_b)
+            #
+            a_map = (1 / (y_bc_alpha + 1e-5)).to("cpu").data
+            b_map = y_bc_beta.to("cpu").data
+            y_b_mean = torch.mean(torch.pow(torch.abs(y_b[j] - x_b[j]), 2), dim=0)
+            y_b_var = (a_map ** 2) * (torch.exp(torch.lgamma(3 / (b_map + 1e-2))) / torch.exp(torch.lgamma(1 / (b_map + 1e-2))))
+            n_batch = y_bc_mu.shape[0]
             if task == "depth":
-                x_hr = x_sr
+                x_b = y_b
+            #
             for j in range(n_batch):
                 num_imgs += 1
                 if not test:
-                    mean_ssim += compute_image_ssim(x_src_mu[j], x_hr[j])
-                    mean_psnr += compute_image_psnr(x_src_mu[j], x_hr[j])
-                    mean_mse += compute_image_mse(x_src_mu[j], x_hr[j])
-                    mean_mae += compute_image_mae(x_src_mu[j], x_hr[j])
+                    mean_ssim += compute_image_ssim(y_bc_mu[j], x_b[j])
+                    mean_psnr += compute_image_psnr(y_bc_mu[j], x_b[j])
+                    mean_mse += compute_image_mse(y_bc_mu[j], x_b[j])
+                    mean_mae += compute_image_mae(y_bc_mu[j], x_b[j])
                 else:
-                    mean_ssim += compute_image_ssim(x_sr[j], x_hr[j])
-                    mean_psnr += compute_image_psnr(x_sr[j], x_hr[j])
-                    mean_mse += compute_image_mse(x_sr[j], x_hr[j])
-                    mean_mae += compute_image_mae(x_sr[j], x_hr[j])
+                    mean_ssim += compute_image_ssim(y_b[j], x_b[j])
+                    mean_psnr += compute_image_psnr(y_b[j], x_b[j])
+                    mean_mse += compute_image_mse(y_b[j], x_b[j])
+                    mean_mae += compute_image_mae(y_b[j], x_b[j])
+                #
                 if viz:
-                    show_SR_w_uncertainties(x_lr[j], x_hr[j], x_sr[j], xSRvar[j])
-
-                error_map = torch.mean(torch.pow(torch.abs(x_sr[j] - x_hr[j]), 2), dim=0).to("cpu").data.reshape(-1)
-                var_map = xSRvar[j].to("cpu").data.reshape(-1)
+                    show_outputs_w_uncertainties(x_a[j], x_b[j], y_b[j], y_b_var[j])
+                #
+                error_map = y_b_mean.to("cpu").data.reshape(-1)
+                var_map = y_b_var[j].to("cpu").data.reshape(-1)
                 list_error.extend(list(error_map.numpy()))
                 list_var.extend(list(var_map.numpy()))
         #
@@ -102,9 +104,9 @@ def eval_BayesCap(
         mean_mse /= num_imgs
         mean_mae /= num_imgs
         print(f"Avg. SSIM: {mean_ssim} | Avg. PSNR: {mean_psnr} | Avg. MSE: {mean_mse} | Avg. MAE: {mean_mae}")
-    # print(len(list_error), len(list_var))
-    print(f"UCE: {compute_uce(list_error[::10], list_var[::10], num_bins=500)[1]}")
-    print(f"C.Coeff: {compute_correlation_coefficient(list_error[::10], list_var[::10])}")
+        # print(len(list_error), len(list_var))
+        print(f"UCE: {compute_uce(list_error[::10], list_var[::10], num_bins=500)[1]}")
+        print(f"C.Coeff: {compute_correlation_coefficient(list_error[::10], list_var[::10])}")
     return mean_ssim
 
 
@@ -155,37 +157,32 @@ def train_BayesCap(
     all_loss = []
     for epoch in range(num_epochs):
         loss_epoch = 0
-        with tqdm(train_loader, unit="batch") as tepoch:
-            for (idx, batch) in enumerate(tepoch):
+        with tqdm(train_loader, unit="batch") as pbar:
+            for (idx, batch) in enumerate(pbar):
                 if idx > 2000:
                     break
-                tepoch.set_description(f"Epoch {epoch}")
+                pbar.set_description(f"Epoch {epoch}")
                 #
-                x_lr, x_hr = batch[0].to(device), batch[1].to(device)
-                x_lr, x_hr = x_lr.type(dtype), x_hr.type(dtype)
+                x_a, x_b = batch[0].to(device).type(dtype), batch[1].to(device).type(dtype)
                 if task == "inpainting":
-                    x_mask = random_mask(x_lr.shape[0], (x_lr.shape[2], x_lr.shape[3]))
+                    x_mask = random_mask(x_a.shape[0], (x_a.shape[2], x_a.shape[3]))
                     x_mask = x_mask.to(device).type(dtype)
                 # pass them through the network
                 with torch.no_grad():
                     if task == "inpainting":
-                        _, x_sr = net_gen(x_lr, x_mask)
+                        _, y_b = net_gen(x_a, x_mask)
                     elif task == "depth":
-                        x_sr = net_gen(x_lr)[("disp", 0)]
+                        y_b = net_gen(x_a)[("disp", 0)]
                     else:
-                        x_sr = net_gen(x_lr)
-                # with torch.autograd.set_detect_anomaly(True):
-                # x_sr = x_sr.clone()
-                x_src_mu, x_src_alpha, x_src_beta = net_cap(x_sr)
-                # print(x_src_alpha)
+                        y_b = net_gen(x_a)
+                y_bc_mu, y_bc_alpha, y_bc_beta = net_cap(y_b)
+                # print(y_bc_alpha)
                 optimizer.zero_grad()
-                loss = cri(x_src_mu, x_src_alpha, x_src_beta, x_sr, x_hr, t1=t1, t2=t2)
-                # print(loss)
-                loss.backward()
+                cri = cri(y_bc_mu, y_bc_alpha, y_bc_beta, y_b, x_b, t1=t1, t2=t2)
+                cri.backward()
                 optimizer.step()
-                #
-                loss_epoch += loss.item()
-                tepoch.set_postfix(loss=loss.item())
+                loss_epoch += cri.item()
+                pbar.set_postfix(loss=cri.item())
             loss_epoch /= len(train_loader)
             all_loss.append(loss_epoch)
             print(f"Avg. loss: {loss_epoch}")

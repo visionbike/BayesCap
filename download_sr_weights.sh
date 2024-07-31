@@ -1,0 +1,2 @@
+gdown "https://drive.google.com/uc?id=1d_5j1f8-vN79htZTfRUqP1ddHZIYsNvL&export=download&comfirm=yes" -O ./ckpt/
+gdown "https://drive.google.com/uc?id=1Vg1r6gKgQ1J3M51n6BeKXYS8auT9NhA9&export=download&confirm=yes" -O ./ckpt/
