@@ -2,9 +2,7 @@ import argparse
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
-from dataset import SRDataset
-from loss import *
-from networks import SRGenerator, SRBayesCap
+from super_resolution_task import *
 from bayescap import *
 
 if __name__ == "__main__":
@@ -12,7 +10,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"])
     parser.add_argument("--gpu_id", type=str, default="0")
     parser.add_argument("--batch_size", type=int, default=2)
-    parser.add_argument("--epoch", type=int, default=2000)
+    parser.add_argument("--epoch", type=int, default=3000)
     args = parser.parse_args()
 
     if args.device == "cuda":
@@ -23,9 +21,9 @@ if __name__ == "__main__":
         device = args.device
 
     print("# Load datasets...")
-    dataset_train = SRDataset(data_root="../data/SRGAN_ImageNet", image_size=(84, 84), upscale_factor=4, mode="train")
-    dataset_val = SRDataset(data_root="../data/Set5/original", image_size=(256, 256), upscale_factor=4, mode="val")
-    dataset_test = SRDataset(data_root="../data/Set5/original", image_size=(256, 256), upscale_factor=4, mode="test")
+    dataset_train = SRDataset(data_root="../data/SRGAN_ImageNet", image_size=(84, 84), upscale_factor=4)
+    dataset_val = SRDataset(data_root="../data/Set5/original", image_size=(256, 256), upscale_factor=4)
+    dataset_test = SRDataset(data_root="../data/Set5/original", image_size=(256, 256), upscale_factor=4)
 
     loader_train = DataLoader(dataset_train, batch_size=args.batch_size, pin_memory=True, shuffle=True)
     loader_val = DataLoader(dataset_val, batch_size=1, pin_memory=True, shuffle=False)
@@ -52,6 +50,7 @@ if __name__ == "__main__":
         num_epochs=args.epoch,
         eval_every=2,
         ckpt_path="../ckpt/BayesCap_SRGAN",
+        task="super-resolution",
         viz=False
     )
 
@@ -66,4 +65,12 @@ if __name__ == "__main__":
     NetC.to(args.device)
     NetC.eval()
     #
-    eval_BayesCap(NetC, NetG, loader_test, device=device, dtype=torch.cuda.FloatTensor, viz=False, test=True)
+    eval_BayesCap(
+        NetC,
+        NetG,
+        loader_test,
+        device=device,
+        dtype=torch.cuda.FloatTensor,
+        task="super-resolution",
+        viz=False,
+        test=True)
