@@ -4,8 +4,32 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 from torchvision import transforms
+from torchvision.transforms import functional as vfn
+random.seed(0)
 
-__all__ = ["random_mask"]
+__all__ = [
+    "image2tensor",
+    "random_mask"
+]
+
+
+def image2tensor(image: np.ndarray, range_norm: bool, half: bool) -> torch.Tensor:
+    """
+    Convert PIL.Image to Tensor.
+
+    :param image: The image data read by PIL.Image.
+    :param range_norm: Scale [0, 1] data to between [-1, 1].
+    :param half:  Whether to convert torch.float32 similarly to torch.half type.
+    :return: Normalized image data
+    """
+    tensor = vfn.to_tensor(image)
+    #
+    if range_norm:
+        tensor = tensor.mul_(2.0).sub_(1.0)
+    if half:
+        tensor = tensor.half()
+    #
+    return tensor
 
 
 def random_mask(num_batch: int = 1, mask_shape: tuple[int, int] = (256, 256)) -> torch.Tensor:
@@ -56,7 +80,6 @@ def random_mask(num_batch: int = 1, mask_shape: tuple[int, int] = (256, 256)) ->
                     angles.append(2 * math.pi - np.random.uniform(angle_min, angle_max))
                 else:
                     angles.append(np.random.uniform(angle_min, angle_max))
-            #
             h, w = mask.size
             vertex.append((int(np.random.randint(0, w)), int(np.random.randint(0, h))))
             for i in range(num_vertex):
