@@ -176,13 +176,13 @@ def train_BayesCap(
                     else:
                         y_b = net_gen(x_a)
                 y_bc_mu, y_bc_alpha, y_bc_beta = net_cap(y_b)
-                # print(y_bc_alpha)
+                #
                 optimizer.zero_grad()
-                cri = cri(y_bc_mu, y_bc_alpha, y_bc_beta, y_b, x_b, t1=t1, t2=t2)
-                cri.backward()
+                loss_iter = cri(y_bc_mu, y_bc_alpha, y_bc_beta, y_b, x_b, t1=t1, t2=t2)
+                loss_iter.backward()
                 optimizer.step()
-                loss_epoch += cri.item()
-                pbar.set_postfix(loss=cri.item())
+                loss_epoch += loss_iter.item()
+                pbar.set_postfix(loss=loss_iter.item())
             loss_epoch /= len(train_loader)
             all_loss.append(loss_epoch)
             print(f"Avg. loss: {loss_epoch}")
