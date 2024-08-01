@@ -72,7 +72,6 @@ def eval_BayesCap(
             #
             a_map = (1 / (y_bc_alpha + 1e-5)).to("cpu").data
             b_map = y_bc_beta.to("cpu").data
-            y_b_mean = torch.mean(torch.pow(torch.abs(y_b[j] - x_b[j]), 2), dim=0)
             y_b_var = (a_map ** 2) * (torch.exp(torch.lgamma(3 / (b_map + 1e-2))) / torch.exp(torch.lgamma(1 / (b_map + 1e-2))))
             n_batch = y_bc_mu.shape[0]
             if task == "depth":
@@ -94,7 +93,7 @@ def eval_BayesCap(
                 if viz:
                     show_outputs_w_uncertainties(x_a[j], x_b[j], y_b[j], y_b_var[j])
                 #
-                error_map = y_b_mean.to("cpu").data.reshape(-1)
+                error_map = torch.mean(torch.pow(torch.abs(y_b[j] - x_b[j]), 2), dim=0).to("cpu").data.reshape(-1)
                 var_map = y_b_var[j].to("cpu").data.reshape(-1)
                 list_error.extend(list(error_map.numpy()))
                 list_var.extend(list(var_map.numpy()))
