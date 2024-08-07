@@ -69,8 +69,7 @@ def compute_image_ssim(x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
     :param x2:
     :return:
     """
-    m = kornia.metrics.ssim(x1.unsqueeze(0), x2.unsqueeze(0), 5)
-    m = m.mean()
+    m = kornia.metrics.ssim(x1.unsqueeze(0), x2.unsqueeze(0), 5).mean()
     return m
 
 

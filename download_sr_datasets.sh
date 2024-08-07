@@ -7,10 +7,10 @@ for DATASET in "${DATASETS[@]}"; do
     # download the selected dataset and move validation images to labeled subfolders
     URL="https://huggingface.co/datasets/goodfellowliu/$FILE/resolve/main/$FILE.zip"
     ZIP_FILE=./data/$FILE.zip
-    mkdir -p ./data/$FILE
-    wget -N $URL -O $ZIP_FILE
-    unzip $ZIP_FILE -d ./data/$FILE
-    rm $ZIP_FILE
+    mkdir -p ./data/"$FILE"
+    wget -N $URL -O "$ZIP_FILE"
+    unzip "$ZIP_FILE" -d ./data/"$FILE"
+    rm "$ZIP_FILE"
     break
   else
     i=$((i + 1))

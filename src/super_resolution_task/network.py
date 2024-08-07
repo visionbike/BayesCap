@@ -30,18 +30,16 @@ class ResidualConvBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         identity = x
-        #
-        out = self.rcb(x)
-        out = torch.add(out, identity)
-        #
-        return out
+        z = self.rcb(x)
+        z = torch.add(z, identity)
+        return z
 
 
 class SRDiscriminator(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.features = nn.Sequential(
-            # input size. (3) x 96 x 96 or (3) x 86 x 86
+            # input size. (3) x 96 x 96 or (3) x 84 x 84
             nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False),
             nn.LeakyReLU(0.2, True),
             # state size. (64) x 48 x 48
@@ -78,11 +76,10 @@ class SRDiscriminator(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = self.features(x)
-        out = torch.flatten(out, 1)
-        out = self.classifier(out)
-        #
-        return out
+        z = self.features(x)
+        z = torch.flatten(z, 1)
+        z = self.classifier(z)
+        return z
 
 
 class SRGenerator(nn.Module):
@@ -123,26 +120,24 @@ class SRGenerator(nn.Module):
         else:
             return self._forward_w_dop_impl(x, dop)
 
-    # Support torch.script function
+    # support torch.script function
     def _forward_impl(self, x: torch.Tensor) -> torch.Tensor:
-        out1 = self.conv_block1(x)
-        out = self.trunk(out1)
-        out2 = self.conv_block2(out)
-        out = torch.add(out1, out2)
-        out = self.upsampling(out)
-        out = self.conv_block3(out)
-        #
-        return out
+        z1 = self.conv_block1(x)
+        z = self.trunk(z1)
+        z2 = self.conv_block2(z)
+        z = torch.add(z1, z2)
+        z = self.upsampling(z)
+        z = self.conv_block3(z)
+        return z
 
     def _forward_w_dop_impl(self, x: torch.Tensor, dop: float | None) -> torch.Tensor:
-        out1 = self.conv_block1(x)
-        out = self.trunk(out1)
-        out2 = nfn.dropout2d(self.conv_block2(out), p=dop)
-        out = torch.add(out1, out2)
-        out = self.upsampling(out)
-        out = self.conv_block3(out)
-        #
-        return out
+        z1 = self.conv_block1(x)
+        z = self.trunk(z1)
+        z2 = nfn.dropout2d(self.conv_block2(z), p=dop)
+        z = torch.add(z1, z2)
+        z = self.upsampling(z)
+        z = self.conv_block3(z)
+        return z
 
     def _initialize_weights(self) -> None:
         for module in self.modules():
@@ -204,15 +199,14 @@ class SRBayesCap(nn.Module):
 
     # Support torch.script function
     def _forward_impl(self, x: torch.Tensor) -> tuple[torch.Tensor, ...]:
-        out1 = self.conv_block1(x)
-        out = self.trunk(out1)
-        out2 = self.conv_block2(out)
-        out = out1 + out2
-        out_mu = self.conv_block3_mu(out)
-        out_alpha = self.conv_block3_alpha(out)
-        out_beta = self.conv_block3_beta(out)
-        #
-        return out_mu, out_alpha, out_beta
+        z1 = self.conv_block1(x)
+        z = self.trunk(z1)
+        z2 = self.conv_block2(z)
+        z = z1 + z2
+        z_mu = self.conv_block3_mu(z)
+        z_alpha = self.conv_block3_alpha(z)
+        z_beta = self.conv_block3_beta(z)
+        return z_mu, z_alpha, z_beta
 
     def _initialize_weights(self) -> None:
         for module in self.modules():
@@ -224,7 +218,7 @@ class SRBayesCap(nn.Module):
                 nn.init.constant_(module.weight, 1)
 
 
-class BayesCap_noID(nn.Module):
+class SRBayesCap_noID(nn.Module):
     def __init__(self, in_channels: int = 3) -> None:
         """
 
@@ -263,8 +257,6 @@ class BayesCap_noID(nn.Module):
             nn.Conv2d(64, 1, kernel_size=9, stride=1, padding=4),
             nn.ReLU(),
         )
-        # output layer
-        # self.conv_block3_mu = nn.Conv2d(64, out_channels, kernel_size=9, stride=1, padding=4)
         # initialize neural network weights
         self._initialize_weights()
 
@@ -273,14 +265,13 @@ class BayesCap_noID(nn.Module):
 
     # support torch.script function
     def _forward_impl(self, x: torch.Tensor) -> tuple[torch.Tensor, ...]:
-        out1 = self.conv_block1(x)
-        out = self.trunk(out1)
-        out2 = self.conv_block2(out)
-        out = out1 + out2
-        # out_mu = self.conv_block3_mu(out)
-        out_alpha = self.conv_block3_alpha(out)
-        out_beta = self.conv_block3_beta(out)
-        return out_alpha, out_beta
+        z1 = self.conv_block1(x)
+        z = self.trunk(z1)
+        z2 = self.conv_block2(z)
+        z = z1 + z2
+        z_alpha = self.conv_block3_alpha(z)
+        z_beta = self.conv_block3_beta(z)
+        return z_alpha, z_beta
 
     def _initialize_weights(self) -> None:
         for module in self.modules():

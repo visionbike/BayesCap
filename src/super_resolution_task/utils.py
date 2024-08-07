@@ -23,12 +23,10 @@ def image2tensor(image: np.ndarray, range_norm: bool, half: bool) -> torch.Tenso
     :return: Normalized image data
     """
     tensor = vfn.to_tensor(image)
-    #
     if range_norm:
         tensor = tensor.mul_(2.0).sub_(1.0)
     if half:
         tensor = tensor.half()
-    #
     return tensor
 
 
@@ -56,7 +54,7 @@ def random_mask(num_batch: int = 1, mask_shape: tuple[int, int] = (256, 256)) ->
         h = random.randint(0, max_delta_height // 2)
         w = random.randint(0, max_delta_width // 2)
         mask = torch.zeros((1, 1, image_height, image_width))
-        mask[:, :, t + h:t + height - h, l + w:l + width - w] = 1
+        mask[:, :, (t + h): (t + height - h), (l + w): (l + width - w)] = 1
         rect_mask = mask
         # brush mask
         min_num_vertex = 4

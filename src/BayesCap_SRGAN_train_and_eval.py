@@ -55,15 +55,8 @@ if __name__ == "__main__":
     )
 
     print("Evaluating BayesCap...")
-    NetG = SRGenerator()
-    NetG.load_state_dict(torch.load("../ckpt/srgan-ImageNet-bc347d67.pth", map_location=device))
-    NetG.to(args.device)
-    NetG.eval()
-    #
     NetC = SRBayesCap(in_channels=3, out_channels=3)
     NetC.load_state_dict(torch.load('../ckpt/BayesCap_SRGAN_best.pth', map_location=device))
-    NetC.to(args.device)
-    NetC.eval()
     #
     eval_BayesCap(
         NetC,
@@ -73,4 +66,4 @@ if __name__ == "__main__":
         dtype=torch.cuda.FloatTensor,
         task="super-resolution",
         viz=False,
-        test=True)
+        test=False)

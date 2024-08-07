@@ -7,45 +7,65 @@ __all__ = ["show_outputs_w_uncertainties"]
 def show_outputs_w_uncertainties(x_a: torch.Tensor,
                                  x_b: torch.Tensor,
                                  y_b: torch.Tensor,
-                                 y_b_var: torch.Tensor,
-                                 elim: tuple[float, float] = (0, 0.01),
-                                 ulim: tuple[float, float] = (0, 0.15)) -> None:
+                                 map_mu: torch.Tensor,
+                                 map_alpha: torch.Tensor,
+                                 map_beta: torch.Tensor,
+                                 map_error: torch.Tensor,
+                                 map_var: torch.Tensor,) -> None:
     """
 
     :param x_a:
     :param x_b:
     :param y_b:
-    :param y_b_var:
-    :param elim:
-    :param ulim:
+    :param map_mu:
+    :param map_alpha:
+    :param map_beta:
+    :param map_error:
+    :param map_var:
     :return:
     """
     plt.figure(figsize=(30, 10))
     #
-    plt.subplot(1, 5, 1)
-    plt.imshow(x_a.to("cpu").data.clip(0, 1).transpose(0, 2).transpose(0, 1))
+    plt.subplot(1, 4, 1)
+    plt.imshow(x_a.clip(0, 1).transpose(0, 2).transpose(0, 1))
     plt.axis("off")
     #
-    plt.subplot(1, 5, 2)
-    plt.imshow(x_b.to("cpu").data.clip(0, 1).transpose(0, 2).transpose(0, 1))
+    plt.subplot(1, 4, 2)
+    plt.imshow(y_b.clip(0, 1).transpose(0, 2).transpose(0, 1))
     plt.axis("off")
     #
-    plt.subplot(1, 5, 3)
-    plt.imshow(y_b.to("cpu").data.clip(0, 1).transpose(0, 2).transpose(0, 1))
+    plt.subplot(1, 4, 3)
+    plt.imshow(map_alpha.transpose(0, 2).transpose(0, 1), cmap="inferno")
+    plt.clim(0, 0.1)
     plt.axis("off")
     #
-    plt.subplot(1, 5, 4)
-    error_map = torch.mean(torch.pow(torch.abs(y_b - x_b), 2), dim=0).to("cpu").data.unsqueeze(0)
-    print("error", error_map.min(), error_map.max())
-    plt.imshow(error_map.transpose(0, 2).transpose(0, 1), cmap="jet")
-    plt.clim(elim[0], elim[1])
+    plt.subplot(1, 4, 4)
+    plt.imshow(map_error, cmap="jet")
+    plt.clim(0, 0.01)
     plt.axis("off")
     #
-    plt.subplot(1, 5, 5)
-    print("uncer", y_b_var.min(), y_b_var.max())
-    plt.imshow(y_b_var.to("cpu").data.transpose(0, 2).transpose(0, 1), cmap="hot")
-    plt.clim(ulim[0], ulim[1])
+    plt.subplots_adjust(wspace=0.0, hspace=0.0)
+    plt.show()
+    #
+    plt.figure(figsize=(30, 10))
+    plt.subplot(1, 4, 1)
+    plt.imshow(x_b.clip(0, 1).transpose(0, 2).transpose(0, 1))
     plt.axis("off")
     #
-    plt.subplots_adjust(wspace=0, hspace=0)
+    plt.subplot(1, 4, 2)
+    plt.imshow((0.6 * map_mu + 0.4 * y_b).clip(0, 1).transpose(0, 2).transpose(0, 1))
+    plt.axis("off")
+    plt.show()
+    #
+    plt.subplot(1, 4, 3)
+    plt.imshow(map_beta.transpose(0, 2).transpose(0, 1), cmap="cividis")
+    plt.clim(0.45, 0.75)
+    plt.axis("off")
+    # show uncertainty map
+    plt.subplot(1, 4, 4)
+    plt.imshow(map_var.transpose(0, 2).transpose(0, 1), cmap="hot")
+    plt.clim(0, 0.15)
+    plt.axis("off")
+    #
+    plt.subplots_adjust(wspace=0.0, hspace=0.0)
     plt.show()

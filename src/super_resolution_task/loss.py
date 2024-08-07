@@ -39,7 +39,6 @@ class ContentLoss(nn.Module):
         hr = hr.sub(self.mean).div(self.std)
         # find the feature map difference between the two images
         loss = nfn.l1_loss(self.feature_extractor(sr), self.feature_extractor(hr))
-        #
         return loss
 
 
@@ -115,9 +114,9 @@ class TempCombLoss(nn.Module):
         self.resi_min = resi_min
         self.resi_max = resi_max
         #
-        self.loss_GenGauss = GenGaussLoss(reduction=self.reduction,
-                                          alpha_eps=self.alpha_eps, beta_eps=self.beta_eps,
-                                          resi_min=self.resi_min, resi_max=self.resi_max)
+        self.loss_gen_gauss = GenGaussLoss(reduction=self.reduction,
+                                           alpha_eps=self.alpha_eps, beta_eps=self.beta_eps,
+                                           resi_min=self.resi_min, resi_max=self.resi_max)
         self.loss_l1 = nn.L1Loss(reduction=self.reduction)
 
     def forward(self,
@@ -130,7 +129,6 @@ class TempCombLoss(nn.Module):
         # target1 is the base model output for identity mapping
         # target2 is the ground truth for the GenGauss loss
         l1 = self.loss_l1(mean, target1)
-        l2 = self.loss_GenGauss(mean, one_over_alpha, beta, target2)
+        l2 = self.loss_gen_gauss(mean, one_over_alpha, beta, target2)
         loss = t1 * l1 + t2 * l2
-        #
         return loss

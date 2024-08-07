@@ -1,6 +1,6 @@
-from torch import Tensor
-from PIL import Image
 from pathlib import Path
+from PIL import Image
+import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
 from torchvision.transforms import functional as vfn
@@ -31,7 +31,7 @@ class SRDataset(Dataset):
             antialias=True
         )
 
-    def __getitem__(self, batch_index: int) -> tuple[Tensor, ...]:
+    def __getitem__(self, batch_index: int) -> tuple[torch.Tensor, ...]:
         # read a batch of image data
         image = Image.open(str(self.image_paths[batch_index]))
         # transform image
