@@ -92,8 +92,8 @@ def eval_BayesCap(
                     mean_mse += compute_image_mse(y_b[j], x_b[j])
                     mean_mae += compute_image_mae(y_b[j], x_b[j])
                 #
-                list_error.extend(map_error[j].tolist())
-                list_var.extend(map_var[j].tolist())
+                list_error.extend(map_error[j].reshape(-1).tolist())
+                list_var.extend(map_var[j].reshape(-1).tolist())
                 #
                 if viz:
                     show_outputs_w_uncertainties(x_a[j], x_b[j], y_b[j],
@@ -105,8 +105,8 @@ def eval_BayesCap(
         mean_mse /= num_imgs
         mean_mae /= num_imgs
         print(f"Avg. SSIM: {mean_ssim} | Avg. PSNR: {mean_psnr} | Avg. MSE: {mean_mse} | Avg. MAE: {mean_mae}")
-        print(f"UCE: {compute_uce(list_error[::10], list_var[::10], num_bins=500)[1]}")
-        print(f"C.Coeff: {compute_correlation_coefficient(list_error[::10], list_var[::10])}")
+        print(f"UCE: {compute_uce(list_error[::100], list_var[::100], num_bins=500)[1]}")
+        print(f"C.Coeff: {compute_correlation_coefficient(list_error[::100], list_var[::100])}")
     return mean_ssim
 
 
